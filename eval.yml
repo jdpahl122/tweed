@@ -126,6 +126,48 @@ data:
                 credentials:
                   version: 11
                   tryit: (( concat "PGPASSWORD=" credentials.password " psql -h " credentials.host " -p " credentials.port " -U " credentials.username " " credentials.database ))
+
+        - name: Redis
+          id:   redis
+          description: |
+            A Redis cluster
+          metadata: {}
+          tags: [redis]
+          plans:
+            - name: v6.0.10
+              id:   v6.0.10
+              description: |
+                Redis version 6.0.10
+              tweed:
+                infrastructure: k8s
+                stencil:  redis/cluster
+                limit:  2
+                config:
+                  version: '6.0.10'
+                credentials:
+                  version: 6.0.10
+                  tryit: (( concat "redis-cli -h " credentials.host " -p " credentials.port " -a " credentials.password ))
+
+        - name: RabbitMQ
+          id:   rabbitmq
+          description: |
+            A standalone RabbitMQ instance
+          metadata: {}
+          tags: [rabbitmq]
+          plans:
+            - name: v3.8.3-management
+              id:   v3.8.3-management
+              description: |
+                RabbitMQ version 3.8.3 management
+              tweed:
+                infrastructure: k8s
+                stencil:  rabbitmq/standalone
+                limit:  3
+                config:
+                  version: '3.8.3-management'
+                credentials:
+                  version: 3.8.3-management
+                  tryit: (( concat "redis-cli -h " credentials.host " -p " credentials.port " -a " credentials.password ))
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -244,11 +286,11 @@ metadata:
 spec:
   tls:
     - hosts:
-        - tweed.starkandwayne.com
+        - tweed.ntr1.jpahl.starkandwayne.com
       secretName: ingress-tls
 
   rules:
-    - host: tweed.starkandwayne.com
+    - host: tweed.ntr1.jpahl.starkandwayne.com
       http:
         paths:
           - path: /

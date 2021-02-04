@@ -1,8 +1,8 @@
-IMAGE ?= tweedproject/kernel
+IMAGE ?= jdpahl122/tweed
 TAG ?= edge
 NAMESPACE ?= tweed
 
-VERSION ?=
+VERSION ?= 123
 BUILD   ?= $(shell ./build/build-number)
 LDFLAGS := -X main.Version="$(VERSION)" -X main.BuildNumber="$(BUILD)"
 
