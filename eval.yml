@@ -209,7 +209,7 @@ spec:
               mountPath: /vault/config
 
         - name:  broker
-          image: tweedproject/kernel:edge
+          image: jdpahl122/tweed:123
           imagePullPolicy: Always
           env:
             - name:  INIT_VAULT
