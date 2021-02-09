@@ -20,7 +20,7 @@ kubernetes)
   echo "RENDERING RESOURCE TEMPLATES"
   echo "============================"
   mkdir -p out/
-  (for what in ns svc ss pvc; do
+  (for what in ns svc dep pvc; do
    echo >&2 ">> rendering k8s/$what.yml ..."
    echo '---'
    spruce merge --prune tweed \

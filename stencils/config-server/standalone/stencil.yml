@@ -1,0 +1,23 @@
+tweed:
+  stencil:
+    name:    rabbitmq
+    version: 1.0.0
+
+  default:
+    version: '3.8.3'
+
+    k8s:
+      disk:         4Gi
+      storageClass: ~      # use default
+
+  user: {}
+  ops:  {}
+
+  k8s:
+    ns: (( concat tweed.prefix tweed.instance))
+    labels:
+      k8s.tweedproject.io/instance:       (( grab tweed.instance ))
+      k8s.tweedproject.io/service:        (( grab tweed.service_id ))
+      k8s.tweedproject.io/plan:           (( grab tweed.plan_id ))
+      k8s.tweedproject.io/stencil.name:   (( grab tweed.stencil.name ))
+      k8s.tweedproject.io/stencil.verson: (( grab tweed.stencil.version ))

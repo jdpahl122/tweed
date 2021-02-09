@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configserver
+  namespace: (( grab tweed.k8s.ns ))
+  labels:    (( grab tweed.k8s.labels ))
+spec:
+spec:
+  replicas: 1
+  selector:
+    matchLabels: (( grab tweed.k8s.labels ))
+  template:
+    metadata:
+      labels: (( grab tweed.k8s.labels ))
+    spec:
+      containers:
+        - name: configserver
+          image: "(( concat "hyness/spring-cloud-config-server:" tweed.ops.version || tweed.default.version ))"
+          ports:
+            - name: http
+              containerPort: 8888
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+          env:
+          {{- if .Values.config.gitUri }}
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_URI
+            value: "{{ .Values.config.gitUri }}"
+          {{- else }}
+          - name: SPRING_PROFILES_ACTIVE
+            value: "native"
+          {{- end}}
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_SEARCHPATHS
+            value: "{{ .Values.config.gitSearchpath }}"
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: "{{ include "spring-cloud-config-server.fullname" . }}"
+                key: "gitUsername"
+          - name: SPRING_CLOUD_CONFIG_SERVER_GIT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: "{{ include "spring-cloud-config-server.fullname" . }}"
+                key: "gitPassword"
+          {{- if .Values.extraEnv }}
+            {{- toYaml .Values.extraEnv | nindent 10 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
