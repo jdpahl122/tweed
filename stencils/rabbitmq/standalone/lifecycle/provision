@@ -4,13 +4,27 @@ set -eu
 echo
 echo "GENERATING CREDENTIALS"
 echo "======================"
-if ! safe exists $VAULT/auth:password; then
-	echo ">> generating a new, random, auth password"
-	safe set $VAULT/auth password=k/$(uuidgen | tr A-Z a-z | cut -d - -f 1) >/dev/null
+if ! safe exists $VAULT/root:defaultuser; then
+  echo ">> generating a new, random, rabbitmq default username"
+  safe set $VAULT/root defaultuser=u$(uuidgen | tr A-Z a-z | cut -d - -f 1) >/dev/null
+fi
+if ! safe exists $VAULT/root:defaultpass; then
+  echo ">> generating a new, random, rabbitmq default password"
+  safe set $VAULT/root defaultpass=s/$(uuidgen | tr A-Z a-z) >/dev/null
 fi
 
-PASSWORD=$(safe get $VAULT/auth:password)
+if ! safe exists $VAULT/root:erlangcookie; then
+  echo ">> generating a new random erlang cookie"
+  safe set $VAULT/root erlangcookie=s/$(uuidgen | tr A-Z a-z) >/dev/null
+fi
 
+USERNAME=$(safe read $VAULT/root:defaultuser)
+PASSWORD=$(safe read $VAULT/root:defaultpass)
+
+echo "default account is '$USERNAME'"
+echo "default pw is '$PASSWORD'"
+echo
+echo
 case $INFRASTRUCTURE_TYPE in
 kubernetes)
   export KUBECONFIG=$INFRASTRUCTURE
@@ -20,7 +34,7 @@ kubernetes)
   echo "RENDERING RESOURCE TEMPLATES"
   echo "============================"
   mkdir -p out/
-  (for what in ns svc ss; do
+  (for what in ns ss svc; do
    echo >&2 ">> rendering k8s/$what.yml ..."
    echo '---'
    spruce merge --prune tweed \
@@ -35,7 +49,6 @@ kubernetes)
   kubectl apply -f out/spec.yml
   echo
   echo ">> waiting for pods to become 'ready'..."
-  kubectl wait --timeout=2h -n $NS pod --for condition=available --all
   echo "done."
   echo
   kubectl -n $NS get all

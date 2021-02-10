@@ -1,52 +1,151 @@
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
+data:
+  enabled_plugins: |
+    [rabbitmq_peer_discovery_k8s, rabbitmq_management, rabbitmq_prometheus].
+  rabbitmq.conf: |
+    cluster_formation.peer_discovery_backend = k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.k8s.address_type = hostname
+    cluster_formation.k8s.service_name = rabbitmq-headless
+    queue_master_locator=min-masters
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: rabbitmq
   namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
 spec:
-  serviceName: rabbitmq
-  replicas: 3
   selector:
     matchLabels:
-      app: rabbitmq
+      app: "rabbitmq"
+  # headless service that gives network identity to the RMQ nodes, and enables them to cluster
+  serviceName: rabbitmq-headless # serviceName is the name of the service that governs this StatefulSet. This service must exist before the StatefulSet, and is responsible for the network identity of the set. Pods get DNS/hostnames that follow the pattern: pod-specific-string.serviceName.default.svc.cluster.local where "pod-specific-string" is managed by the StatefulSet controller.
+  volumeClaimTemplates:
+  - metadata:
+      name: rabbitmq-data
+      namespace: (( concat tweed.prefix tweed.instance ))
+      labels:    (( grab tweed.k8s.labels ))
+    spec:
+      storageClassName: standard
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: "3Gi"
   template:
     metadata:
-      labels:
-        app: rabbitmq
+      name: rabbitmq
+      namespace: (( concat tweed.prefix tweed.instance ))
+      labels:    (( grab tweed.k8s.labels ))
     spec:
+      initContainers:
+      # Since k8s 1.9.4, config maps mount read-only volumes. Since the Docker image also writes to the config file,
+      # the file must be mounted as read-write. We use init containers to copy from the config map read-only
+      # path, to a read-write path
+      - name: "rabbitmq-config"
+        image: busybox:1.32.0
+        volumeMounts:
+        - name: rabbitmq-config
+          mountPath: /tmp/rabbitmq
+        - name: rabbitmq-config-rw
+          mountPath: /etc/rabbitmq
+        command:
+        - sh
+        - -c
+        # the newline is needed since the Docker image entrypoint scripts appends to the config file
+        - cp /tmp/rabbitmq/rabbitmq.conf /etc/rabbitmq/rabbitmq.conf && echo '' >> /etc/rabbitmq/rabbitmq.conf;
+          cp /tmp/rabbitmq/enabled_plugins /etc/rabbitmq/enabled_plugins
+      volumes:
+      - name: rabbitmq-config
+        configMap:
+          name: rabbitmq-config
+          optional: false
+          items:
+          - key: enabled_plugins
+            path: "enabled_plugins"
+          - key: rabbitmq.conf
+            path: "rabbitmq.conf"
+      # read-write volume into which to copy the rabbitmq.conf and enabled_plugins files
+      # this is needed since the docker image writes to the rabbitmq.conf file
+      # and Kubernetes Config Maps are mounted as read-only since Kubernetes 1.9.4
+      - name: rabbitmq-config-rw
+        emptyDir: {}
+      - name: rabbitmq-data
+        persistentVolumeClaim:
+          claimName: rabbitmq-data
+      serviceAccount: rabbitmq
+      # The Docker image runs as the `rabbitmq` user with uid 999
+      # and writes to the `rabbitmq.conf` file
+      # The security context is needed since the image needs
+      # permission to write to this file. Without the security
+      # context, `rabbitmq.conf` is owned by root and inaccessible
+      # by the `rabbitmq` user
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
       containers:
-        - name: rabbitmq
-          image: (( concat "rabbitmq:" tweed.ops.version || tweed.default.version ))
-          ports:
-            - name: http
-              protocol: TCP
-              containerPort: 15672
-            - name: amqp
-              protocol: TCP
-              containerPort: 5672
-          livenessProbe:
-            exec:
-              command:
-                - "rabbitmq-diagnostics"
-                - "ping"
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 15
-          readinessProbe:
-            exec:
-              command:
-                - "rabbitmq-diagnostics"
-                - "check_port_connectivity"
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 15
-  volumeClaimTemplates:
-    - metadata:
-        name: rabbitmq
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: 10Gi
-        storageClassName: do-block-storage
+      - name: rabbitmq
+        # Community Docker Image
+        image: (( concat "rabbitmq:" tweed.ops.version || tweed.default.version ))
+        volumeMounts:
+        # mounting rabbitmq.conf and enabled_plugins
+        # this should have writeable access, this might be a problem
+        - name: rabbitmq-config-rw
+          mountPath: "/etc/rabbitmq"
+          # mountPath: "/etc/rabbitmq/conf.d/"
+        # rabbitmq data directory
+        - name: rabbitmq-data
+          mountPath: "/var/lib/rabbitmq/mnesia"
+        env:
+        - name: RABBITMQ_DEFAULT_PASS
+          value: (( vault tweed.vault "/root:defaultpass" ))
+        - name: RABBITMQ_DEFAULT_USER
+          value: (( vault tweed.vault "/root:defaultuser" ))
+        - name: RABBITMQ_ERLANG_COOKIE
+          value: (( vault tweed.vault "/root:erlangcookie" ))
+        ports:
+        - name: amqp
+          containerPort: 5672
+          protocol: TCP
+        - name: management
+          containerPort: 15672
+          protocol: TCP
+        - name: prometheus
+          containerPort: 15692
+          protocol: TCP
+        - name: epmd
+          containerPort: 4369
+          protocol: TCP
+        livenessProbe:
+          exec:
+            # This is just an example. There is no "one true health check" but rather
+            # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
+            # and intrusive health checks.
+            # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
+            #
+            # Stage 2 check:
+            command: ["rabbitmq-diagnostics", "status"]
+          initialDelaySeconds: 60
+          # See https://www.rabbitmq.com/monitoring.html for monitoring frequency recommendations.
+          periodSeconds: 60
+          timeoutSeconds: 15
+        readinessProbe: # probe to know when RMQ is ready to accept traffic
+          exec:
+            # This is just an example. There is no "one true health check" but rather
+            # several rabbitmq-diagnostics commands that can be combined to form increasingly comprehensive
+            # and intrusive health checks.
+            # Learn more at https://www.rabbitmq.com/monitoring.html#health-checks.
+            #
+            # Stage 1 check:
+            command: ["rabbitmq-diagnostics", "ping"]
+          initialDelaySeconds: 20
+          periodSeconds: 60
+          timeoutSeconds: 10

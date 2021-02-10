@@ -17,6 +17,60 @@ spec:
       name: http
       protocol: TCP
   selector: (( grab tweed.k8s.labels ))
-
-
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-headless
+  namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
+spec:
+  clusterIP: None
+  ports:
+  - name: epmd
+    port: 4369
+    protocol: TCP
+    targetPort: 4369
+  - name: cluster-rpc
+    port: 25672
+    protocol: TCP
+    targetPort: 25672
+  selector:
+    app: rabbitmq
+  type: ClusterIP
+  sessionAffinity: None
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rabbitmq
+  namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: rabbitmq
+  namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  namespace: (( concat tweed.prefix tweed.instance ))
+  labels:    (( grab tweed.k8s.labels ))
+  namespace: test-rabbitmq
+subjects:
+- kind: ServiceAccount
+  name: rabbitmq
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rabbitmq
