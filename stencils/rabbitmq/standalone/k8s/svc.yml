@@ -7,8 +7,6 @@ metadata:
   labels:    (( grab tweed.k8s.labels ))
 spec:
   type: LoadBalancer
-  selector:
-    app: rabbitmq
   ports:
     - port: 5672
       targetPort: 5672
@@ -18,7 +16,7 @@ spec:
       targetPort: 15672
       name: http
       protocol: TCP
-  selector:
-    app: (( grab tweed.k8s.labels ))
+  selector: (( grab tweed.k8s.labels ))
+
 
 

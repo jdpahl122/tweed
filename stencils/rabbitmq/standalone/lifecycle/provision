@@ -20,7 +20,7 @@ kubernetes)
   echo "RENDERING RESOURCE TEMPLATES"
   echo "============================"
   mkdir -p out/
-  (for what in ns svc ss pvc; do
+  (for what in ns svc ss; do
    echo >&2 ">> rendering k8s/$what.yml ..."
    echo '---'
    spruce merge --prune tweed \
@@ -35,7 +35,7 @@ kubernetes)
   kubectl apply -f out/spec.yml
   echo
   echo ">> waiting for pods to become 'ready'..."
-  kubectl wait --timeout=2h -n $NS deployment/rabbitmq --for condition=available
+  kubectl wait --timeout=2h -n $NS pod --for condition=available --all
   echo "done."
   echo
   kubectl -n $NS get all

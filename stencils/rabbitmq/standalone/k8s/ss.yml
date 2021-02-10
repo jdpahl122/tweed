@@ -41,3 +41,12 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 15
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: do-block-storage
